@@ -194,6 +194,10 @@
     @apply text-xs font-medium;
   }
 
+  .contrast-ratio {
+    @apply text-[9px] opacity-60 font-medium;
+  }
+
   .swatch-tooltip {
     @apply absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50;
     @apply bg-popover border border-border rounded-md p-2 shadow-lg;
