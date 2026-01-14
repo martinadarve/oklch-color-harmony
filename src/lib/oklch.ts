@@ -278,7 +278,7 @@ export function generateRamp(
   return { name, baseHex, steps: result };
 }
 
-// Generate ramp from new base hex while trying to match original structure
+// Generate ramp from new base hex - maintains consistent hue throughout
 export function regenerateRampFromBase(
   name: string,
   newBaseHex: string,
@@ -287,19 +287,20 @@ export function regenerateRampFromBase(
   const newBaseOklch = hexToOklch(newBaseHex);
   const oldBaseOklch = hexToOklch(originalRamp.baseHex);
   
-  // Calculate hue shift
-  const hueShift = newBaseOklch.h - oldBaseOklch.h;
-  const chromaRatio = newBaseOklch.c / (oldBaseOklch.c || 0.01);
+  // Use the NEW base hue for ALL steps (consistent hue)
+  const newHue = newBaseOklch.h;
+  
+  // Calculate chroma ratio to scale appropriately
+  const chromaRatio = oldBaseOklch.c > 0.001 
+    ? newBaseOklch.c / oldBaseOklch.c 
+    : 1;
   
   const newSteps: ColorStep[] = originalRamp.steps.map(step => {
-    // Shift hue and adjust chroma
-    let newH = step.oklch.h + hueShift;
-    if (newH < 0) newH += 360;
-    if (newH >= 360) newH -= 360;
-    
+    // Keep the same lightness, apply new hue to ALL steps
     const newC = Math.max(0, step.oklch.c * chromaRatio);
     
-    const newOklch = clampChroma({ l: step.oklch.l, c: newC, h: newH });
+    // Use consistent hue from new base
+    const newOklch = clampChroma({ l: step.oklch.l, c: newC, h: newHue });
     
     return {
       step: step.step,
@@ -309,6 +310,43 @@ export function regenerateRampFromBase(
   });
   
   return { name, baseHex: newBaseHex, steps: newSteps };
+}
+
+// Generate a completely new ramp from a base color
+export function generateNewRamp(name: string, baseHex: string): ColorRamp {
+  const baseOklch = hexToOklch(baseHex);
+  const steps = [50, 100, 150, 200, 250, 350, 450, 550, 650, 750, 800, 850, 900, 950];
+  
+  // Lightness curve: step 50 = very light, step 950 = very dark
+  // Using a custom curve optimized for design systems
+  const getLightness = (step: number): number => {
+    const normalized = (step - 50) / 900; // 0 to 1
+    // Slightly non-linear for better perceptual distribution
+    return 0.975 - Math.pow(normalized, 0.9) * 0.82;
+  };
+  
+  // Chroma curve: peaks around 450-550, reduces at extremes
+  const getChroma = (step: number): number => {
+    const normalized = (step - 50) / 900;
+    // Bell curve centered around 0.45 (step ~450)
+    const peak = 0.45;
+    const falloff = Math.exp(-Math.pow((normalized - peak) * 2.5, 2));
+    // Scale to base chroma, with minimum at extremes
+    return baseOklch.c * (0.15 + 0.85 * falloff);
+  };
+  
+  const result: ColorStep[] = steps.map(step => {
+    const l = getLightness(step);
+    const c = getChroma(step);
+    const h = baseOklch.h; // ALWAYS use base hue
+    
+    const clamped = clampChroma({ l, c, h });
+    const hex = oklchToHex(clamped);
+    
+    return { step, hex, oklch: clamped };
+  });
+  
+  return { name, baseHex, steps: result };
 }
 
 // Format OKLCH for display
