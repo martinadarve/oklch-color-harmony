@@ -350,6 +350,14 @@ export function generateRamp(
         : baseOklch.c;
 
     const result: ColorStep[] = STEP_VALUES.map((step, stepIndex) => {
+      // If the caller provided a reference token for the core range,
+      // return it *exactly* (this is how we match the Accessible Palette output).
+      const lockedHex = refMap.get(step);
+      if (lockedHex && step >= 150 && step <= 850) {
+        const locked = lockedHex.toUpperCase();
+        return { step, hex: locked, oklch: hexToOklch(locked) };
+      }
+
       const targetLuminance = getTargetLuminanceByIndex(stepIndex);
 
       // Use reference chroma as a hint for the core range, otherwise a bell curve from base chroma
