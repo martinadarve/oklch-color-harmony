@@ -183,60 +183,73 @@ export function getContrastRatio(hex1: string, hex2: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-// OKLCH lightness to approximate relative luminance
-// This is a simplified approximation - L in OKLCH correlates with perceived lightness
-function oklchLToLuminance(L: number): number {
-  // OKLCH L is perceptually uniform, roughly correlates with luminance^(1/3)
-  return Math.pow(L, 3);
+// Target luminance scale
+//
+// accessiblepalette.com behaves as if every ramp shares the exact same luminance at each step
+// (therefore the same contrast vs white), independent of hue/chroma.
+//
+// We derive that shared luminance curve from the reference Neutrals ramp you provided.
+// Neutrals itself stays exactly as provided in defaultPalettes.
+const STEP_VALUES = [50, 100, 150, 200, 250, 350, 450, 550, 650, 750, 800, 850, 900, 950] as const;
+
+const REFERENCE_NEUTRALS_HEX_BY_STEP: Record<(typeof STEP_VALUES)[number], string> = {
+  50: '#FBF9F8',
+  100: '#F7F4F2',
+  150: '#EEECEB',
+  200: '#D9D4D1',
+  250: '#C4B9B4',
+  350: '#AEA39D',
+  450: '#978881',
+  550: '#786A64',
+  650: '#5F5550',
+  750: '#4A4440',
+  800: '#3A3632',
+  850: '#2C2926',
+  900: '#211F1D',
+  950: '#151413',
+};
+
+const TARGET_LUMINANCE_BY_STEP_INDEX: number[] = STEP_VALUES.map((step) =>
+  getRelativeLuminance(REFERENCE_NEUTRALS_HEX_BY_STEP[step])
+);
+
+function getTargetLuminanceByIndex(stepIndex: number): number {
+  return TARGET_LUMINANCE_BY_STEP_INDEX[Math.max(0, Math.min(TARGET_LUMINANCE_BY_STEP_INDEX.length - 1, stepIndex))];
 }
 
-// Luminance to OKLCH lightness
-function luminanceToOklchL(luminance: number): number {
-  return Math.pow(Math.max(0, Math.min(1, luminance)), 1/3);
-}
+function solveOklchForTargetLuminance(params: {
+  targetLuminance: number;
+  hue: number;
+  targetChroma: number;
+}): OklchColor {
+  const { targetLuminance, hue, targetChroma } = params;
 
-// Generate lightness values that produce equal contrast ratios between each step
-function generateEqualContrastLightnessScale(stepCount: number): number[] {
-  // Define target luminance range
-  const whiteLum = 1.0; // White reference
-  const minLum = 0.015; // Darkest luminance (around step 950)
-  const maxLum = 0.95;  // Lightest luminance (around step 50)
-  
-  // We want equal contrast ratio jumps from white to each successive step
-  // Contrast ratio = (L1 + 0.05) / (L2 + 0.05)
-  // For equal perceptual steps, we use logarithmic spacing of contrast ratios
-  
-  const maxContrast = (whiteLum + 0.05) / (minLum + 0.05);
-  const minContrast = (whiteLum + 0.05) / (maxLum + 0.05);
-  
-  // Logarithmic interpolation of contrast ratios
-  const logMin = Math.log(minContrast);
-  const logMax = Math.log(maxContrast);
-  
-  const lightnessValues: number[] = [];
-  
-  for (let i = 0; i < stepCount; i++) {
-    const t = i / (stepCount - 1);
-    // Logarithmic interpolation for perceptually uniform contrast steps
-    const logContrast = logMin + t * (logMax - logMin);
-    const contrast = Math.exp(logContrast);
-    
-    // Solve for luminance: contrast = (1 + 0.05) / (lum + 0.05)
-    const luminance = (whiteLum + 0.05) / contrast - 0.05;
-    
-    // Convert luminance to OKLCH L
-    const oklchL = luminanceToOklchL(Math.max(0.01, luminance));
-    lightnessValues.push(oklchL);
+  let low = 0;
+  let high = 1;
+
+  // Binary search on OKLCH lightness so that the resulting *sRGB luminance* matches the target.
+  for (let i = 0; i < 26; i++) {
+    const mid = (low + high) / 2;
+
+    // Keep chroma in gamut for this lightness.
+    const maxC = findMaxChroma(mid, hue) * 0.98;
+    const c = Math.min(targetChroma, maxC);
+
+    const lum = getRelativeLuminance(oklchToHex({ l: mid, c, h: hue }));
+
+    if (lum > targetLuminance) {
+      high = mid;
+    } else {
+      low = mid;
+    }
   }
-  
-  return lightnessValues;
+
+  const l = (low + high) / 2;
+  const maxC = findMaxChroma(l, hue) * 0.98;
+  const c = Math.min(targetChroma, maxC);
+
+  return { l, c, h: hue };
 }
-
-// Standard step values
-const STEP_VALUES = [50, 100, 150, 200, 250, 350, 450, 550, 650, 750, 800, 850, 900, 950];
-
-// Pre-calculated equal contrast lightness scale for 14 steps
-const EQUAL_CONTRAST_LIGHTNESS = generateEqualContrastLightnessScale(14);
 
 export interface ColorStep {
   step: number;
@@ -296,89 +309,113 @@ function findMaxChroma(lightness: number, hue: number): number {
   return low;
 }
 
-// Generate a color ramp using OKLCH with equal contrast ratio between steps
+// Generate a color ramp using OKLCH, enforcing a shared luminance (contrast) curve across ramps
 export function generateRamp(
   name: string,
   baseHex: string,
   referenceSteps?: { step: number; hex: string }[]
 ): ColorRamp {
-  // If we have reference steps, use them for 150-850 range
+  const baseOklch = hexToOklch(baseHex);
+
+  const getChromaMultiplier = (stepIndex: number, totalSteps: number) => {
+    const normalized = stepIndex / (totalSteps - 1);
+    const peak = 0.45;
+    const spread = 0.35;
+    const bellCurve = Math.exp(-Math.pow((normalized - peak) / spread, 2));
+    return 0.25 + 0.75 * bellCurve;
+  };
+
+  // If we have reference steps, treat 150-850 as chroma “hints” (keep close),
+  // but always solve lightness from the shared target luminance curve.
   if (referenceSteps && referenceSteps.length > 0) {
-    const refMap = new Map(referenceSteps.map(s => [s.step, s.hex]));
-    
-    // Parse reference colors
-    const refOklch = referenceSteps.map(s => ({
-      step: s.step,
-      oklch: hexToOklch(s.hex)
-    }));
-    
-    // Calculate consistent hue from references
-    const avgHue = refOklch.reduce((sum, r) => sum + r.oklch.h, 0) / refOklch.length;
-    
-    // Find base chroma from references (around step 450-550)
-    const midRefs = refOklch.filter(r => r.step >= 350 && r.step <= 650);
-    const baseChroma = midRefs.length > 0
-      ? midRefs.reduce((sum, r) => sum + r.oklch.c, 0) / midRefs.length
-      : hexToOklch(baseHex).c;
-    
-    const result: ColorStep[] = STEP_VALUES.map((step, stepIndex) => {
-      // Use reference values for 150-850
-      if (refMap.has(step)) {
-        const hex = refMap.get(step)!;
-        return { step, hex, oklch: hexToOklch(hex) };
-      }
-      
-      // For extrapolated steps (50, 100, 900, 950), use equal contrast curve
-      const l = EQUAL_CONTRAST_LIGHTNESS[stepIndex];
-      const c = calculateChroma(l, baseChroma, avgHue, stepIndex, STEP_VALUES.length);
-      const clamped = clampChroma({ l, c, h: avgHue });
-      
-      return { step, hex: oklchToHex(clamped), oklch: clamped };
+    const refMap = new Map(referenceSteps.map((s) => [s.step, s.hex] as const));
+    const refOklchByStep = new Map(
+      referenceSteps.map((s) => [s.step, hexToOklch(s.hex)] as const)
+    );
+
+    // Prefer hue from the base (step 450), fallback to average reference hue.
+    const refOklchs = [...refOklchByStep.values()];
+    const avgHue =
+      refOklchs.reduce((sum, r) => sum + r.h, 0) / Math.max(1, refOklchs.length);
+    const hue = Number.isFinite(baseOklch.h) ? baseOklch.h : avgHue;
+
+    // Base chroma from mid references if available
+    const midRefs = refOklchs.filter((r, i) => {
+      const step = referenceSteps[i]?.step;
+      return step != null && step >= 350 && step <= 650;
     });
-    
+    const baseChroma =
+      midRefs.length > 0
+        ? midRefs.reduce((sum, r) => sum + r.c, 0) / midRefs.length
+        : baseOklch.c;
+
+    const result: ColorStep[] = STEP_VALUES.map((step, stepIndex) => {
+      const targetLuminance = getTargetLuminanceByIndex(stepIndex);
+
+      // Use reference chroma as a hint for the core range, otherwise a bell curve from base chroma
+      const ref = refOklchByStep.get(step);
+      const chromaHint =
+        step >= 150 && step <= 850 && ref
+          ? ref.c
+          : baseChroma * getChromaMultiplier(stepIndex, STEP_VALUES.length);
+
+      const solved = solveOklchForTargetLuminance({
+        targetLuminance,
+        hue,
+        targetChroma: chromaHint,
+      });
+
+      return { step, hex: oklchToHex(solved), oklch: solved };
+    });
+
     return { name, baseHex, steps: result };
   }
-  
-  // Generate completely from base color using equal contrast scale
-  const baseOklch = hexToOklch(baseHex);
-  
+
+  // No references: generate everything from base hue/chroma but still match shared luminance per step
   const result: ColorStep[] = STEP_VALUES.map((step, stepIndex) => {
-    const l = EQUAL_CONTRAST_LIGHTNESS[stepIndex];
-    const c = calculateChroma(l, baseOklch.c, baseOklch.h, stepIndex, STEP_VALUES.length);
-    
-    const clamped = clampChroma({ l, c, h: baseOklch.h });
-    const hex = oklchToHex(clamped);
-    
-    return { step, hex, oklch: clamped };
+    const targetLuminance = getTargetLuminanceByIndex(stepIndex);
+    const targetChroma = baseOklch.c * getChromaMultiplier(stepIndex, STEP_VALUES.length);
+    const solved = solveOklchForTargetLuminance({
+      targetLuminance,
+      hue: baseOklch.h,
+      targetChroma,
+    });
+
+    return { step, hex: oklchToHex(solved), oklch: solved };
   });
-  
+
   return { name, baseHex, steps: result };
 }
 
-// Regenerate ramp from new base hex with equal contrast
+// Regenerate ramp from new base hex, keeping the shared luminance (contrast) curve
 export function regenerateRampFromBase(
   name: string,
   newBaseHex: string,
   _originalRamp: ColorRamp
 ): ColorRamp {
   const newBaseOklch = hexToOklch(newBaseHex);
-  
+
+  const getChromaMultiplier = (stepIndex: number, totalSteps: number) => {
+    const normalized = stepIndex / (totalSteps - 1);
+    const peak = 0.45;
+    const spread = 0.35;
+    const bellCurve = Math.exp(-Math.pow((normalized - peak) / spread, 2));
+    return 0.25 + 0.75 * bellCurve;
+  };
+
   const newSteps: ColorStep[] = STEP_VALUES.map((step, stepIndex) => {
-    // Use equal contrast lightness scale
-    const l = EQUAL_CONTRAST_LIGHTNESS[stepIndex];
-    
-    // Calculate chroma with natural curve
-    const c = calculateChroma(l, newBaseOklch.c, newBaseOklch.h, stepIndex, STEP_VALUES.length);
-    
-    const clamped = clampChroma({ l, c, h: newBaseOklch.h });
-    
-    return {
-      step,
-      hex: oklchToHex(clamped),
-      oklch: clamped
-    };
+    const targetLuminance = getTargetLuminanceByIndex(stepIndex);
+    const targetChroma = newBaseOklch.c * getChromaMultiplier(stepIndex, STEP_VALUES.length);
+
+    const solved = solveOklchForTargetLuminance({
+      targetLuminance,
+      hue: newBaseOklch.h,
+      targetChroma,
+    });
+
+    return { step, hex: oklchToHex(solved), oklch: solved };
   });
-  
+
   return { name, baseHex: newBaseHex, steps: newSteps };
 }
 
