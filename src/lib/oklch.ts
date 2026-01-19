@@ -190,6 +190,7 @@ export function getContrastRatio(hex1: string, hex2: string): number {
 //
 // We derive that shared luminance curve from the reference Neutrals ramp you provided.
 // Neutrals itself stays exactly as provided in defaultPalettes.
+// For steps 150-850, we enforce exact contrast ratios matching the reference neutrals.
 const STEP_VALUES = [50, 100, 150, 200, 250, 350, 450, 550, 650, 750, 800, 850, 900, 950] as const;
 
 const REFERENCE_NEUTRALS_HEX_BY_STEP: Record<(typeof STEP_VALUES)[number], string> = {
@@ -209,6 +210,10 @@ const REFERENCE_NEUTRALS_HEX_BY_STEP: Record<(typeof STEP_VALUES)[number], strin
   950: '#151413',
 };
 
+// Calculate target luminance for each step based on reference neutrals
+// This is the core of the Accessible Palette behaviour we mimic:
+// every ramp shares the same sRGB luminance per step, so contrast vs
+// white/black and grayscale conversions are consistent across hues.
 const TARGET_LUMINANCE_BY_STEP_INDEX: number[] = STEP_VALUES.map((step) =>
   getRelativeLuminance(REFERENCE_NEUTRALS_HEX_BY_STEP[step])
 );
@@ -228,14 +233,16 @@ function solveOklchForTargetLuminance(params: {
   let high = 1;
 
   // Binary search on OKLCH lightness so that the resulting *sRGB luminance* matches the target.
-  for (let i = 0; i < 26; i++) {
+  const iterations = 26;
+  for (let i = 0; i < iterations; i++) {
     const mid = (low + high) / 2;
 
     // Keep chroma in gamut for this lightness.
     const maxC = findMaxChroma(mid, hue) * 0.98;
     const c = Math.min(targetChroma, maxC);
 
-    const lum = getRelativeLuminance(oklchToHex({ l: mid, c, h: hue }));
+    const hex = oklchToHex({ l: mid, c, h: hue });
+    const lum = getRelativeLuminance(hex);
 
     if (lum > targetLuminance) {
       high = mid;
@@ -350,15 +357,13 @@ export function generateRamp(
         : baseOklch.c;
 
     const result: ColorStep[] = STEP_VALUES.map((step, stepIndex) => {
-      // If the caller provided a reference token for the core range,
-      // return it *exactly* (this is how we match the Accessible Palette output).
+      // For Pink specifically, keep the 450 token exactly as provided so it
+      // matches your design tokens (C27390) and Accessible Palette output.
       const lockedHex = refMap.get(step);
-      if (lockedHex && step >= 150 && step <= 850) {
+      if (name === 'Pink' && step === 450 && lockedHex) {
         const locked = lockedHex.toUpperCase();
         return { step, hex: locked, oklch: hexToOklch(locked) };
       }
-
-      const targetLuminance = getTargetLuminanceByIndex(stepIndex);
 
       // Use reference chroma as a hint for the core range, otherwise a bell curve from base chroma
       const ref = refOklchByStep.get(step);
@@ -367,6 +372,7 @@ export function generateRamp(
           ? ref.c
           : baseChroma * getChromaMultiplier(stepIndex, STEP_VALUES.length);
 
+      const targetLuminance = getTargetLuminanceByIndex(stepIndex);
       const solved = solveOklchForTargetLuminance({
         targetLuminance,
         hue,
@@ -379,10 +385,12 @@ export function generateRamp(
     return { name, baseHex, steps: result };
   }
 
-  // No references: generate everything from base hue/chroma but still match shared luminance per step
+  // No references: generate everything from base hue/chroma but still match shared
+  // sRGB luminance per step so that desaturation / grayscale align across ramps.
   const result: ColorStep[] = STEP_VALUES.map((step, stepIndex) => {
     const targetLuminance = getTargetLuminanceByIndex(stepIndex);
     const targetChroma = baseOklch.c * getChromaMultiplier(stepIndex, STEP_VALUES.length);
+    
     const solved = solveOklchForTargetLuminance({
       targetLuminance,
       hue: baseOklch.h,
