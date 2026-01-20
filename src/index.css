@@ -115,7 +115,7 @@
 
   .ramp-editor {
     @apply flex flex-col;
-    min-width: 200px;
+    min-width: 160px;
   }
 
   .ramp-header {

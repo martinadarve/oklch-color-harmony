@@ -13,13 +13,74 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  horizontalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+function SortableRampItem({ id, children }: { id: string, children: React.ReactNode }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="h-full">
+      {children}
+    </div>
+  );
+}
 
 export function PaletteGenerator() {
   const [ramps, setRamps] = useState<ColorRamp[]>(getDefaultPalettes);
   const [newRampName, setNewRampName] = useState('');
   const [newRampHex, setNewRampHex] = useState('#6366F1');
   const [dialogOpen, setDialogOpen] = useState(false);
-  
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setRamps((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
+
   const handleRampChange = useCallback((index: number, updatedRamp: ColorRamp) => {
     setRamps(prev => {
       const newRamps = [...prev];
@@ -27,23 +88,23 @@ export function PaletteGenerator() {
       return newRamps;
     });
   }, []);
-  
+
   const handleDeleteRamp = useCallback((index: number) => {
     setRamps(prev => prev.filter((_, i) => i !== index));
     toast.success('Ramp deleted');
   }, []);
-  
+
   const handleAddRamp = () => {
     if (!newRampName.trim()) {
       toast.error('Please enter a name for the ramp');
       return;
     }
-    
+
     if (!/^#[0-9A-Fa-f]{6}$/.test(newRampHex)) {
       toast.error('Please enter a valid hex color');
       return;
     }
-    
+
     const newRamp = generateRamp(newRampName.trim(), newRampHex);
     setRamps(prev => [...prev, newRamp]);
     setNewRampName('');
@@ -51,7 +112,7 @@ export function PaletteGenerator() {
     setDialogOpen(false);
     toast.success(`Added "${newRampName}" ramp`);
   };
-  
+
   const handleExport = () => {
     const exportData = {
       version: '1.0',
@@ -64,7 +125,7 @@ export function PaletteGenerator() {
         })),
       })),
     };
-    
+
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -74,7 +135,7 @@ export function PaletteGenerator() {
     URL.revokeObjectURL(url);
     toast.success('Palette exported');
   };
-  
+
   const handleExportCSS = () => {
     let css = ':root {\n';
     ramps.forEach(ramp => {
@@ -85,11 +146,11 @@ export function PaletteGenerator() {
       css += '\n';
     });
     css += '}';
-    
+
     navigator.clipboard.writeText(css);
     toast.success('CSS variables copied to clipboard');
   };
-  
+
   return (
     <div className="palette-generator">
       <header className="palette-header">
@@ -100,7 +161,7 @@ export function PaletteGenerator() {
               Create perceptually uniform color ramps using the OKLCH color space
             </p>
           </div>
-          
+
           <div className="header-actions">
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
@@ -145,12 +206,12 @@ export function PaletteGenerator() {
                 </div>
               </DialogContent>
             </Dialog>
-            
+
             <Button variant="outline" onClick={handleExportCSS}>
               <Download className="h-4 w-4 mr-2" />
               Copy CSS
             </Button>
-            
+
             <Button variant="outline" onClick={handleExport}>
               <Upload className="h-4 w-4 mr-2" />
               Export JSON
@@ -158,20 +219,32 @@ export function PaletteGenerator() {
           </div>
         </div>
       </header>
-      
+
       <main className="palette-content">
-        <div className="ramps-container">
-          {ramps.map((ramp, index) => (
-            <ColorRampEditor
-              key={`${ramp.name}-${index}`}
-              ramp={ramp}
-              onRampChange={(updated) => handleRampChange(index, updated)}
-              onDelete={ramps.length > 1 ? () => handleDeleteRamp(index) : undefined}
-            />
-          ))}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={ramps.map(r => r.id)}
+            strategy={horizontalListSortingStrategy}
+          >
+            <div className="ramps-container">
+              {ramps.map((ramp, index) => (
+                <SortableRampItem key={ramp.id} id={ramp.id}>
+                  <ColorRampEditor
+                    ramp={ramp}
+                    onRampChange={(updated) => handleRampChange(index, updated)}
+                    onDelete={ramps.length > 1 ? () => handleDeleteRamp(index) : undefined}
+                  />
+                </SortableRampItem>
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       </main>
-      
+
       <footer className="palette-footer">
         <p>Click any swatch to copy its hex value • Edit base color to regenerate ramp</p>
       </footer>

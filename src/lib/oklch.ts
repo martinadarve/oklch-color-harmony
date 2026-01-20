@@ -85,62 +85,62 @@ export function hexToOklch(hex: string): OklchColor {
   const lr = srgbToLinear(r);
   const lg = srgbToLinear(g);
   const lb = srgbToLinear(b);
-  
+
   const [L, a, bVal] = linearRgbToOklab(lr, lg, lb);
-  
+
   const c = Math.sqrt(a * a + bVal * bVal);
   let h = Math.atan2(bVal, a) * (180 / Math.PI);
   if (h < 0) h += 360;
-  
+
   return { l: L, c, h };
 }
 
 // OKLCH to Hex
 export function oklchToHex(oklch: OklchColor): string {
   const { l, c, h } = oklch;
-  
+
   const hRad = h * (Math.PI / 180);
   const a = c * Math.cos(hRad);
   const b = c * Math.sin(hRad);
-  
+
   const [lr, lg, lb] = oklabToLinearRgb(l, a, b);
-  
+
   const r = linearToSrgb(lr);
   const g = linearToSrgb(lg);
   const bVal = linearToSrgb(lb);
-  
+
   return rgbToHex(r, g, bVal);
 }
 
 // Check if color is in gamut
 export function isInGamut(oklch: OklchColor): boolean {
   const { l, c, h } = oklch;
-  
+
   const hRad = h * (Math.PI / 180);
   const a = c * Math.cos(hRad);
   const b = c * Math.sin(hRad);
-  
+
   const [lr, lg, lb] = oklabToLinearRgb(l, a, b);
-  
+
   const r = linearToSrgb(lr);
   const g = linearToSrgb(lg);
   const bVal = linearToSrgb(lb);
-  
+
   return r >= 0 && r <= 1 && g >= 0 && g <= 1 && bVal >= 0 && bVal <= 1;
 }
 
 // Clamp chroma to stay in gamut
 export function clampChroma(oklch: OklchColor): OklchColor {
   let { l, c, h } = oklch;
-  
+
   if (isInGamut({ l, c, h })) {
     return { l, c, h };
   }
-  
+
   // Binary search for max chroma in gamut
   let low = 0;
   let high = c;
-  
+
   while (high - low > 0.0001) {
     const mid = (low + high) / 2;
     if (isInGamut({ l, c: mid, h })) {
@@ -149,7 +149,7 @@ export function clampChroma(oklch: OklchColor): OklchColor {
       high = mid;
     }
   }
-  
+
   return { l, c: low, h };
 }
 
@@ -160,6 +160,7 @@ export interface ColorStep {
 }
 
 export interface ColorRamp {
+  id: string;
   name: string;
   baseHex: string;
   steps: ColorStep[];
@@ -194,7 +195,7 @@ export function getContrastRatio(hex1: string, hex2: string): number {
 const STEP_VALUES = [50, 100, 150, 200, 250, 350, 450, 550, 650, 750, 800, 850, 900, 950] as const;
 
 const REFERENCE_NEUTRALS_HEX_BY_STEP: Record<(typeof STEP_VALUES)[number], string> = {
-  50: '#FBF9F8',
+  50: '#FDFCFB',
   100: '#F7F4F2',
   150: '#EEECEB',
   200: '#D9D4D1',
@@ -272,8 +273,8 @@ export interface ColorRamp {
 
 // Generate chroma value that creates a natural curve while staying in gamut
 function calculateChroma(
-  lightness: number, 
-  baseChroma: number, 
+  lightness: number,
+  baseChroma: number,
   hue: number,
   stepIndex: number,
   totalSteps: number
@@ -281,21 +282,21 @@ function calculateChroma(
   // Bell curve: maximum chroma in the middle lightness range
   // Map step index to 0-1, with peak around index 6-8 (steps 450-650)
   const normalized = stepIndex / (totalSteps - 1);
-  
+
   // Peak chroma around 40-60% of the scale
   const peak = 0.45;
   const spread = 0.35;
   const bellCurve = Math.exp(-Math.pow((normalized - peak) / spread, 2));
-  
+
   // Scale chroma: full at peak, reduced at extremes
   // Very light colors need less chroma, very dark too
   const chromaMultiplier = 0.25 + 0.75 * bellCurve;
-  
+
   let targetChroma = baseChroma * chromaMultiplier;
-  
+
   // Find maximum in-gamut chroma for this lightness/hue
   const maxGamutChroma = findMaxChroma(lightness, hue);
-  
+
   return Math.min(targetChroma, maxGamutChroma * 0.98);
 }
 
@@ -303,7 +304,7 @@ function calculateChroma(
 function findMaxChroma(lightness: number, hue: number): number {
   let low = 0;
   let high = 0.4;
-  
+
   while (high - low > 0.001) {
     const mid = (low + high) / 2;
     if (isInGamut({ l: lightness, c: mid, h: hue })) {
@@ -312,7 +313,7 @@ function findMaxChroma(lightness: number, hue: number): number {
       high = mid;
     }
   }
-  
+
   return low;
 }
 
@@ -382,7 +383,7 @@ export function generateRamp(
       return { step, hex: oklchToHex(solved), oklch: solved };
     });
 
-    return { name, baseHex, steps: result };
+    return { id: crypto.randomUUID(), name, baseHex, steps: result };
   }
 
   // No references: generate everything from base hue/chroma but still match shared
@@ -390,7 +391,7 @@ export function generateRamp(
   const result: ColorStep[] = STEP_VALUES.map((step, stepIndex) => {
     const targetLuminance = getTargetLuminanceByIndex(stepIndex);
     const targetChroma = baseOklch.c * getChromaMultiplier(stepIndex, STEP_VALUES.length);
-    
+
     const solved = solveOklchForTargetLuminance({
       targetLuminance,
       hue: baseOklch.h,
@@ -400,7 +401,7 @@ export function generateRamp(
     return { step, hex: oklchToHex(solved), oklch: solved };
   });
 
-  return { name, baseHex, steps: result };
+  return { id: crypto.randomUUID(), name, baseHex, steps: result };
 }
 
 // Regenerate ramp from new base hex, keeping the shared luminance (contrast) curve
@@ -432,7 +433,7 @@ export function regenerateRampFromBase(
     return { step, hex: oklchToHex(solved), oklch: solved };
   });
 
-  return { name, baseHex: newBaseHex, steps: newSteps };
+  return { id: _originalRamp.id, name, baseHex: newBaseHex, steps: newSteps };
 }
 
 // Generate a completely new ramp from a base color
