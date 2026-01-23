@@ -1,73 +1,117 @@
-# Welcome to your Lovable project
+# OKLCH Color Palette Generator
 
-## Project info
+A perceptually uniform color palette generator using the OKLCH color space, designed to be the source of truth for design system colors.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Features
 
-## How can I edit this code?
+- 🎨 **OKLCH Color Space**: Perceptually uniform color generation
+- 💾 **Save System**: Distinguish between temporary and saved color ramps
+- 🔄 **Smart Detection**: Automatically restores saved state when colors return to original
+- 📦 **localStorage Persistence**: Saved ramps persist across sessions
+- 🎯 **Drag & Drop**: Reorder color ramps
+- 📋 **Export**: Copy as CSS variables or export as JSON
+- ✨ **Visual Indicators**: Clear distinction between saved and unsaved ramps
 
-There are several ways of editing your application.
+## Technologies
 
-**Use Lovable**
+- **Vite** - Fast build tool
+- **TypeScript** - Type safety
+- **React** - UI framework
+- **shadcn/ui** - Component library
+- **Tailwind CSS** - Styling
+- **@dnd-kit** - Drag and drop functionality
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Getting Started
 
-Changes made via Lovable will be committed automatically to this repo.
+### Prerequisites
 
-**Use your preferred IDE**
+- Node.js & npm - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+### Installation
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
+# Clone the repository
 git clone <YOUR_GIT_URL>
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Navigate to the project directory
+cd oklch-color-harmony
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start the development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+The application will be available at `http://localhost:8080`
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Usage
 
-**Use GitHub Codespaces**
+### Creating Color Ramps
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+1. Click **"Add Ramp"** button
+2. Enter a name and base color
+3. New ramp appears as **unsaved** (amber background, "Unsaved" badge)
+4. Click **"Save"** to permanently save the ramp
 
-## What technologies are used for this project?
+### Saving Ramps
 
-This project is built with:
+- Unsaved ramps have:
+  - Amber background tint
+  - "Unsaved" badge
+  - "Save" button
+- Click "Save" to make permanent
+- Saved ramps persist in localStorage
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Smart Restore
 
-## How can I deploy this project?
+The app automatically detects when you restore a color to its original value:
+- Undo (Cmd+Z) to original → Automatically marks as saved
+- Reset button → Restores to original saved state
+- Color picker restore → Smart detection of original color
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+### Exporting
 
-## Can I connect a custom domain to my Lovable project?
+- **Copy CSS**: Copies CSS custom properties to clipboard
+- **Export JSON**: Downloads palette as JSON file
 
-Yes, you can!
+## Development
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+```sh
+# Run development server
+npm run dev
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+# Build for production
+npm run build
+
+# Run tests
+npm test
+
+# Run tests in watch mode
+npm test:watch
+
+# Lint code
+npm run lint
+```
+
+## Project Structure
+
+```
+src/
+├── components/
+│   ├── ui/              # shadcn/ui components
+│   ├── ColorRampEditor.tsx
+│   ├── ColorSwatch.tsx
+│   └── PaletteGenerator.tsx
+├── lib/
+│   ├── defaultPalettes.ts  # Default color ramps
+│   ├── oklch.ts            # OKLCH color utilities
+│   ├── storage.ts          # localStorage persistence
+│   └── utils.ts
+└── pages/
+    └── Index.tsx
+```
+
+## License
+
+MIT

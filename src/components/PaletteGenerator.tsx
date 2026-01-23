@@ -1,11 +1,22 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ColorRamp, generateRamp } from '@/lib/oklch';
 import { getDefaultPalettes } from '@/lib/defaultPalettes';
+import { loadRamps, saveRamps } from '@/lib/storage';
 import { ColorRampEditor } from './ColorRampEditor';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Download, Upload } from 'lucide-react';
+import { Plus, Download, Upload, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Dialog,
   DialogContent,
@@ -53,10 +64,15 @@ function SortableRampItem({ id, children }: { id: string, children: React.ReactN
 }
 
 export function PaletteGenerator() {
-  const [ramps, setRamps] = useState<ColorRamp[]>(getDefaultPalettes);
+  const [ramps, setRamps] = useState<ColorRamp[]>(() => {
+    const saved = loadRamps();
+    return saved || getDefaultPalettes();
+  });
   const [newRampName, setNewRampName] = useState('');
   const [newRampHex, setNewRampHex] = useState('#6366F1');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [rampToSave, setRampToSave] = useState<number | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -84,6 +100,7 @@ export function PaletteGenerator() {
   const handleRampChange = useCallback((index: number, updatedRamp: ColorRamp) => {
     setRamps(prev => {
       const newRamps = [...prev];
+      // Use the isSaved value from updatedRamp (ColorRampEditor handles smart detection)
       newRamps[index] = updatedRamp;
       return newRamps;
     });
@@ -105,12 +122,33 @@ export function PaletteGenerator() {
       return;
     }
 
-    const newRamp = generateRamp(newRampName.trim(), newRampHex);
+    // New ramps are unsaved by default
+    const newRamp = generateRamp(newRampName.trim(), newRampHex, undefined, false);
     setRamps(prev => [...prev, newRamp]);
     setNewRampName('');
     setNewRampHex('#6366F1');
     setDialogOpen(false);
     toast.success(`Added "${newRampName}" ramp`);
+  };
+
+  const handleSaveRamp = (index: number) => {
+    setRampToSave(index);
+    setSaveDialogOpen(true);
+  };
+
+  const confirmSaveRamp = () => {
+    if (rampToSave === null) return;
+
+    setRamps(prev => {
+      const newRamps = [...prev];
+      newRamps[rampToSave] = { ...newRamps[rampToSave], isSaved: true };
+      saveRamps(newRamps);
+      return newRamps;
+    });
+
+    toast.success('Ramp saved permanently');
+    setSaveDialogOpen(false);
+    setRampToSave(null);
   };
 
   const handleExport = () => {
@@ -155,11 +193,18 @@ export function PaletteGenerator() {
     <div className="palette-generator">
       <header className="palette-header">
         <div className="header-content">
-          <div className="header-title">
-            <h1>OKLCH Palette Generator</h1>
-            <p className="header-subtitle">
-              Create perceptually uniform color ramps using the OKLCH color space
-            </p>
+          <div className="header-logo-section flex items-center gap-4">
+            <img
+              src="/polaris-logo.png"
+              alt="Polaris Design System"
+              className="h-10 w-auto object-contain"
+            />
+            <div className="header-title">
+              <h1 className="text-xl font-bold">Polaris DS Core Color Generator</h1>
+              <p className="header-subtitle text-sm text-muted-foreground">
+                Source of truth for the Polaris Design System core color palette
+              </p>
+            </div>
           </div>
 
           <div className="header-actions">
@@ -237,6 +282,7 @@ export function PaletteGenerator() {
                     ramp={ramp}
                     onRampChange={(updated) => handleRampChange(index, updated)}
                     onDelete={ramps.length > 1 ? () => handleDeleteRamp(index) : undefined}
+                    onSave={() => handleSaveRamp(index)}
                   />
                 </SortableRampItem>
               ))}
@@ -248,6 +294,23 @@ export function PaletteGenerator() {
       <footer className="palette-footer">
         <p>Click any swatch to copy its hex value • Edit base color to regenerate ramp</p>
       </footer>
+
+      <AlertDialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Save Color Ramp</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently save this ramp as part of your design system's source of truth.
+              <br /><br />
+              <strong>Note:</strong> This does not automatically update design tokens - that process is manual.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSaveRamp}>Save Permanently</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -164,6 +164,7 @@ export interface ColorRamp {
   name: string;
   baseHex: string;
   steps: ColorStep[];
+  isSaved: boolean;
 }
 
 // Calculate relative luminance for WCAG contrast
@@ -265,11 +266,7 @@ export interface ColorStep {
   oklch: OklchColor;
 }
 
-export interface ColorRamp {
-  name: string;
-  baseHex: string;
-  steps: ColorStep[];
-}
+
 
 // Generate chroma value that creates a natural curve while staying in gamut
 function calculateChroma(
@@ -321,7 +318,8 @@ function findMaxChroma(lightness: number, hue: number): number {
 export function generateRamp(
   name: string,
   baseHex: string,
-  referenceSteps?: { step: number; hex: string }[]
+  referenceSteps?: { step: number; hex: string }[],
+  isSaved: boolean = false
 ): ColorRamp {
   const baseOklch = hexToOklch(baseHex);
 
@@ -383,7 +381,7 @@ export function generateRamp(
       return { step, hex: oklchToHex(solved), oklch: solved };
     });
 
-    return { id: crypto.randomUUID(), name, baseHex, steps: result };
+    return { id: crypto.randomUUID(), name, baseHex, steps: result, isSaved };
   }
 
   // No references: generate everything from base hue/chroma but still match shared
@@ -401,7 +399,7 @@ export function generateRamp(
     return { step, hex: oklchToHex(solved), oklch: solved };
   });
 
-  return { id: crypto.randomUUID(), name, baseHex, steps: result };
+  return { id: crypto.randomUUID(), name, baseHex, steps: result, isSaved };
 }
 
 // Regenerate ramp from new base hex, keeping the shared luminance (contrast) curve
@@ -433,7 +431,7 @@ export function regenerateRampFromBase(
     return { step, hex: oklchToHex(solved), oklch: solved };
   });
 
-  return { id: _originalRamp.id, name, baseHex: newBaseHex, steps: newSteps };
+  return { id: _originalRamp.id, name, baseHex: newBaseHex, steps: newSteps, isSaved: false };
 }
 
 // Generate a completely new ramp from a base color
