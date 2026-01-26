@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { ColorRamp, generateRamp } from '@/lib/oklch';
 import { getDefaultPalettes } from '@/lib/defaultPalettes';
 import { loadRamps, saveRamps } from '@/lib/storage';
+import { readRampsFromUrl, writeRampsToUrl } from '@/lib/urlState';
 import { ColorRampEditor } from './ColorRampEditor';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,8 +66,15 @@ function SortableRampItem({ id, children }: { id: string, children: React.ReactN
 
 export function PaletteGenerator() {
   const [ramps, setRamps] = useState<ColorRamp[]>(() => {
-    const saved = loadRamps();
-    return saved || getDefaultPalettes();
+    if (typeof window !== 'undefined') {
+      const fromUrl = readRampsFromUrl();
+      if (fromUrl?.length) return fromUrl;
+
+      const saved = loadRamps();
+      if (saved) return saved;
+    }
+
+    return getDefaultPalettes();
   });
   const [newRampName, setNewRampName] = useState('');
   const [newRampHex, setNewRampHex] = useState('#6366F1');
@@ -189,6 +197,12 @@ export function PaletteGenerator() {
     toast.success('CSS variables copied to clipboard');
   };
 
+  // Persist current state in the URL so it can be shared
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    writeRampsToUrl(ramps);
+  }, [ramps]);
+
   return (
     <div className="palette-generator">
       <header className="palette-header">
@@ -200,7 +214,7 @@ export function PaletteGenerator() {
               className="h-10 w-auto object-contain"
             />
             <div className="header-title">
-              <h1 className="text-xl font-bold">Polaris DS Core Color Generator</h1>
+              <h1 className="text-xl font-bold">Design system Core Color Generator</h1>
               <p className="header-subtitle text-sm text-muted-foreground">
                 Source of truth for the Polaris Design System core color palette
               </p>
