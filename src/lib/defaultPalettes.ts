@@ -20,8 +20,8 @@ export const defaultPalettes: ColorRamp[] = [
     { step: 850, hex: '#2C2926' },
     { step: 900, hex: '#211F1D' },
     { step: 950, hex: '#151413' },
-  ]),
-  
+  ], true),
+
   // Very Peri - periwinkle blue-violet
   generateRamp('Very Peri', '#7A90EF', [
     { step: 50, hex: '#F8F9FF' },
@@ -38,8 +38,8 @@ export const defaultPalettes: ColorRamp[] = [
     { step: 850, hex: '#252360' },
     { step: 900, hex: '#1A1940' },
     { step: 950, hex: '#100E28' },
-  ]),
-  
+  ], true),
+
   // Blue - true blue, not cyan
   generateRamp('Blue', '#5C8FBF', [
     { step: 50, hex: '#F0F6FC' },
@@ -56,8 +56,8 @@ export const defaultPalettes: ColorRamp[] = [
     { step: 850, hex: '#1A2834' },
     { step: 900, hex: '#121C24' },
     { step: 950, hex: '#0A1016' },
-  ]),
-  
+  ], true),
+
   // Green - consistent green hue
   generateRamp('Green', '#389C70', [
     { step: 50, hex: '#F0FDF6' },
@@ -74,8 +74,8 @@ export const defaultPalettes: ColorRamp[] = [
     { step: 850, hex: '#0D2A1C' },
     { step: 900, hex: '#081E13' },
     { step: 950, hex: '#04120A' },
-  ]),
-  
+  ], true),
+
   // Yellow - warm golden yellow
   generateRamp('Yellow', '#A68741', [
     { step: 50, hex: '#FEFBF3' },
@@ -92,8 +92,8 @@ export const defaultPalettes: ColorRamp[] = [
     { step: 850, hex: '#28220F' },
     { step: 900, hex: '#1C170A' },
     { step: 950, hex: '#100D05' },
-  ]),
-  
+  ], true),
+
   // Orange - true orange
   generateRamp('Orange', '#F15900', [
     { step: 50, hex: '#FFF6F0' },
@@ -110,8 +110,8 @@ export const defaultPalettes: ColorRamp[] = [
     { step: 850, hex: '#3A1500' },
     { step: 900, hex: '#260E00' },
     { step: 950, hex: '#150800' },
-  ]),
-  
+  ], true),
+
   // Red - true red (not pink)
   generateRamp('Red', '#E53935', [
     { step: 50, hex: '#FFF5F5' },
@@ -128,8 +128,8 @@ export const defaultPalettes: ColorRamp[] = [
     { step: 850, hex: '#400D0D' },
     { step: 900, hex: '#2A0808' },
     { step: 950, hex: '#180404' },
-  ]),
-  
+  ], true),
+
   // Pink - consistent pink/magenta hue
   generateRamp('Pink', '#C27390', [
     { step: 50, hex: '#FDF5F8' },
@@ -146,7 +146,7 @@ export const defaultPalettes: ColorRamp[] = [
     { step: 850, hex: '#301C22' },
     { step: 900, hex: '#1F1216' },
     { step: 950, hex: '#110A0C' },
-  ]),
+  ], true),
 ];
 
 export function getDefaultPalettes(): ColorRamp[] {

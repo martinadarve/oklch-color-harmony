@@ -3,18 +3,20 @@ import { ColorRamp, regenerateRampFromBase, hexToOklch, formatOklch } from '@/li
 import { ColorSwatch } from './ColorSwatch';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { HexColorPicker } from 'react-colorful';
-import { Copy, RotateCcw, Trash2, Check, X } from 'lucide-react';
+import { Copy, RotateCcw, Trash2, Check, X, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ColorRampEditorProps {
   ramp: ColorRamp;
   onRampChange: (ramp: ColorRamp) => void;
   onDelete?: () => void;
+  onSave?: () => void;
 }
 
-export function ColorRampEditor({ ramp, onRampChange, onDelete }: ColorRampEditorProps) {
+export function ColorRampEditor({ ramp, onRampChange, onDelete, onSave }: ColorRampEditorProps) {
   const [baseHex, setBaseHex] = useState(ramp.baseHex);
   const [originalRamp] = useState(ramp);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -36,6 +38,12 @@ export function ColorRampEditor({ ramp, onRampChange, onDelete }: ColorRampEdito
     // Validate hex format
     if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
       const newRamp = regenerateRampFromBase(ramp.name, hex, originalRamp);
+
+      // Smart detection: if color matches original, restore saved state
+      if (hex.toUpperCase() === originalRamp.baseHex.toUpperCase()) {
+        newRamp.isSaved = originalRamp.isSaved;
+      }
+
       onRampChange(newRamp);
     }
   }, [ramp.name, originalRamp, onRampChange]);
@@ -59,14 +67,23 @@ export function ColorRampEditor({ ramp, onRampChange, onDelete }: ColorRampEdito
   };
 
   const handlePickerRestore = () => {
-    handleHexChange(snapshotHex.current);
+    const restoredHex = snapshotHex.current;
+    handleHexChange(restoredHex);
     setIsPickerOpen(false);
-    toast.info('Color restored');
+
+    // If restored to original, show different message
+    if (restoredHex.toUpperCase() === originalRamp.baseHex.toUpperCase()) {
+      toast.info('Color restored to original');
+    } else {
+      toast.info('Color restored');
+    }
   };
 
   const handleReset = () => {
     setBaseHex(originalRamp.baseHex);
-    onRampChange(originalRamp);
+    // Restore original ramp with its saved state
+    const restoredRamp = { ...originalRamp, id: ramp.id };
+    onRampChange(restoredRamp);
     toast.info('Ramp reset to original');
   };
 
@@ -81,10 +98,17 @@ export function ColorRampEditor({ ramp, onRampChange, onDelete }: ColorRampEdito
   const baseOklch = hexToOklch(baseHex.length === 7 ? baseHex : ramp.baseHex);
 
   return (
-    <div className="ramp-editor">
+    <div className={`ramp-editor ${!ramp.isSaved ? 'ramp-editor-unsaved' : ''}`}>
       <div className="ramp-header">
         <div className="ramp-title-section">
-          <h3 className="ramp-title">{ramp.name}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="ramp-title">{ramp.name}</h3>
+            {!ramp.isSaved && (
+              <Badge variant="outline" className="unsaved-badge">
+                Unsaved
+              </Badge>
+            )}
+          </div>
           <div className="ramp-controls">
             <div className="base-color-input">
               <Popover open={isPickerOpen} onOpenChange={onPickerOpenChange}>
@@ -128,6 +152,18 @@ export function ColorRampEditor({ ramp, onRampChange, onDelete }: ColorRampEdito
           </div>
         </div>
         <div className="ramp-actions">
+          {!ramp.isSaved && onSave && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={onSave}
+              title="Save ramp permanently"
+              className="save-button"
+            >
+              <Save className="h-3 w-3 mr-1" />
+              Save
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
