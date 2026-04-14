@@ -159,12 +159,15 @@ export interface ColorStep {
   oklch: OklchColor;
 }
 
+export type ColorModel = 'oklch' | 'hsl';
+
 export interface ColorRamp {
   id: string;
   name: string;
   baseHex: string;
   steps: ColorStep[];
   isSaved: boolean;
+  colorModel?: ColorModel;
 }
 
 // Calculate relative luminance for WCAG contrast
@@ -259,14 +262,6 @@ function solveOklchForTargetLuminance(params: {
 
   return { l, c, h: hue };
 }
-
-export interface ColorStep {
-  step: number;
-  hex: string;
-  oklch: OklchColor;
-}
-
-
 
 // Generate chroma value that creates a natural curve while staying in gamut
 function calculateChroma(
@@ -402,12 +397,18 @@ export function generateRamp(
   return { id: crypto.randomUUID(), name, baseHex, steps: result, isSaved };
 }
 
-// Regenerate ramp from new base hex, keeping the shared luminance (contrast) curve
+// Regenerate ramp from new base hex, keeping the shared luminance (contrast) curve.
+// Respects the ramp's colorModel — HSL ramps regenerate via HSL, OKLCH via OKLCH.
 export function regenerateRampFromBase(
   name: string,
   newBaseHex: string,
-  _originalRamp: ColorRamp
+  originalRamp: ColorRamp
 ): ColorRamp {
+  if (originalRamp.colorModel === 'hsl') {
+    const newRamp = generateHslRamp(name, newBaseHex, false);
+    return { ...newRamp, id: originalRamp.id };
+  }
+
   const newBaseOklch = hexToOklch(newBaseHex);
 
   const getChromaMultiplier = (stepIndex: number, totalSteps: number) => {
@@ -431,12 +432,99 @@ export function regenerateRampFromBase(
     return { step, hex: oklchToHex(solved), oklch: solved };
   });
 
-  return { id: _originalRamp.id, name, baseHex: newBaseHex, steps: newSteps, isSaved: false };
+  return { id: originalRamp.id, name, baseHex: newBaseHex, steps: newSteps, isSaved: false };
 }
 
 // Generate a completely new ramp from a base color
 export function generateNewRamp(name: string, baseHex: string): ColorRamp {
   return generateRamp(name, baseHex);
+}
+
+// ─── HSL utilities ───────────────────────────────────────────────────────────
+
+export function hexToHsl(hex: string): { h: number; s: number; l: number } {
+  const { r, g, b } = hexToRgb(hex);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  const l = (max + min) / 2;
+
+  if (delta === 0) return { h: 0, s: 0, l: l * 100 };
+
+  const s = delta / (1 - Math.abs(2 * l - 1));
+
+  let h = 0;
+  if (max === r) h = ((g - b) / delta) % 6;
+  else if (max === g) h = (b - r) / delta + 2;
+  else h = (r - g) / delta + 4;
+  h = ((h * 60) + 360) % 360;
+
+  return { h, s: s * 100, l: l * 100 };
+}
+
+export function formatHsl(hex: string): string {
+  const { h, s, l } = hexToHsl(hex);
+  return `hsl(${h.toFixed(1)} ${s.toFixed(1)}% ${l.toFixed(1)}%)`;
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const sn = s / 100;
+  const ln = l / 100;
+  const a = sn * Math.min(ln, 1 - ln);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const c = ln - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(c * 255);
+  };
+  return rgbToHex(f(0) / 255, f(8) / 255, f(4) / 255);
+}
+
+// Lightness targets per step derived from the Figma yellow design palette.
+// Hue and saturation come from the base color; only lightness varies.
+const HSL_LIGHTNESS_BY_STEP: Record<number, number> = {
+  50:  95,
+  100: 90,
+  150: 85,
+  200: 80,
+  250: 76,
+  350: 67,
+  450: 50,
+  550: 46,
+  650: 43,
+  750: 39,
+  800: 36,
+  850: 32,
+  900: 25,
+  950: 21,
+};
+
+export function generateHslRamp(
+  name: string,
+  baseHex: string,
+  isSaved: boolean = false
+): ColorRamp {
+  const { h, s } = hexToHsl(baseHex);
+  const steps: ColorStep[] = STEP_VALUES.map((step) => {
+    const l = HSL_LIGHTNESS_BY_STEP[step];
+    const hex = hslToHex(h, s, l).toUpperCase();
+    return { step, hex, oklch: hexToOklch(hex) };
+  });
+  return { id: crypto.randomUUID(), name, baseHex, steps, isSaved, colorModel: 'hsl' };
+}
+
+// Generate a ramp from exact hex values per step, bypassing OKLCH luminance logic.
+// Use this for colors (like Yellow) that need fixed, design-specified values.
+export function generateFixedRamp(
+  name: string,
+  baseHex: string,
+  fixedHexByStep: Record<number, string>,
+  isSaved: boolean = false
+): ColorRamp {
+  const steps: ColorStep[] = STEP_VALUES.map((step) => {
+    const hex = (fixedHexByStep[step] ?? baseHex).toUpperCase();
+    return { step, hex, oklch: hexToOklch(hex) };
+  });
+  return { id: crypto.randomUUID(), name, baseHex, steps, isSaved };
 }
 
 // Format OKLCH for display

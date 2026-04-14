@@ -66,15 +66,21 @@ function SortableRampItem({ id, children }: { id: string, children: React.ReactN
 
 export function PaletteGenerator() {
   const [ramps, setRamps] = useState<ColorRamp[]>(() => {
+    const defaults = getDefaultPalettes();
+    const defaultsByName = new Map(defaults.map((d) => [d.name, d]));
+
+    const mergeWithDefaults = (loaded: ColorRamp[]): ColorRamp[] =>
+      loaded.map((r) => defaultsByName.get(r.name) ?? r);
+
     if (typeof window !== 'undefined') {
       const fromUrl = readRampsFromUrl();
-      if (fromUrl?.length) return fromUrl;
+      if (fromUrl?.length) return mergeWithDefaults(fromUrl);
 
       const saved = loadRamps();
-      if (saved) return saved;
+      if (saved) return mergeWithDefaults(saved);
     }
 
-    return getDefaultPalettes();
+    return defaults;
   });
   const [newRampName, setNewRampName] = useState('');
   const [newRampHex, setNewRampHex] = useState('#6366F1');

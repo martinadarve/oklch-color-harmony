@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ColorRamp, regenerateRampFromBase, hexToOklch, formatOklch } from '@/lib/oklch';
+import {
+  ColorRamp, ColorModel,
+  regenerateRampFromBase, hexToOklch, formatOklch,
+  generateHslRamp, generateRamp, formatHsl,
+} from '@/lib/oklch';
 import { ColorSwatch } from './ColorSwatch';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -87,6 +91,19 @@ export function ColorRampEditor({ ramp, onRampChange, onDelete, onSave }: ColorR
     toast.info('Ramp reset to original');
   };
 
+  const handleModelChange = useCallback((model: ColorModel) => {
+    if (model === ramp.colorModel) return;
+    const hex = baseHex.length === 7 ? baseHex : ramp.baseHex;
+    let newRamp: ColorRamp;
+    if (model === 'hsl') {
+      newRamp = generateHslRamp(ramp.name, hex, false);
+    } else {
+      newRamp = generateRamp(ramp.name, hex, undefined, false);
+    }
+    onRampChange({ ...newRamp, id: ramp.id });
+    toast.success(`Switched to ${model.toUpperCase()} model`);
+  }, [ramp, baseHex, onRampChange]);
+
   const handleCopyAll = () => {
     const cssVars = ramp.steps
       .map(s => `--${ramp.name.toLowerCase().replace(/\s+/g, '-')}-${s.step}: ${s.hex};`)
@@ -95,7 +112,9 @@ export function ColorRampEditor({ ramp, onRampChange, onDelete, onSave }: ColorR
     toast.success('CSS variables copied');
   };
 
-  const baseOklch = hexToOklch(baseHex.length === 7 ? baseHex : ramp.baseHex);
+  const resolvedHex = baseHex.length === 7 ? baseHex : ramp.baseHex;
+  const baseOklch = hexToOklch(resolvedHex);
+  const currentModel: ColorModel = ramp.colorModel ?? 'oklch';
 
   return (
     <div className={`ramp-editor ${!ramp.isSaved ? 'ramp-editor-unsaved' : ''}`}>
@@ -115,7 +134,7 @@ export function ColorRampEditor({ ramp, onRampChange, onDelete, onSave }: ColorR
                 <PopoverTrigger asChild>
                   <div
                     className="color-preview cursor-pointer hover:ring-2 ring-primary/20 transition-all"
-                    style={{ backgroundColor: baseHex.length === 7 ? baseHex : ramp.baseHex }}
+                    style={{ backgroundColor: resolvedHex }}
                     title="Click to edit color"
                     onPointerDown={(e) => e.stopPropagation()}
                   />
@@ -148,7 +167,23 @@ export function ColorRampEditor({ ramp, onRampChange, onDelete, onSave }: ColorR
                 maxLength={7}
               />
             </div>
-            <span className="oklch-display">{formatOklch(baseOklch)}</span>
+            <span className="oklch-display">
+              {currentModel === 'hsl' ? formatHsl(resolvedHex) : formatOklch(baseOklch)}
+            </span>
+            <div className="flex items-center rounded-md border border-border overflow-hidden text-xs font-medium">
+              <button
+                className={`px-2 py-1 transition-colors ${currentModel === 'oklch' ? 'bg-foreground text-background' : 'hover:bg-muted'}`}
+                onClick={() => handleModelChange('oklch')}
+              >
+                OKLCH
+              </button>
+              <button
+                className={`px-2 py-1 transition-colors ${currentModel === 'hsl' ? 'bg-foreground text-background' : 'hover:bg-muted'}`}
+                onClick={() => handleModelChange('hsl')}
+              >
+                HSL
+              </button>
+            </div>
           </div>
         </div>
         <div className="ramp-actions">
