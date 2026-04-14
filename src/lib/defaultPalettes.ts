@@ -1,4 +1,4 @@
-import { ColorRamp, generateRamp } from './oklch';
+import { ColorRamp, generateRamp, generateHslRamp } from './oklch';
 
 // Default color palettes based on the provided reference
 // Fixed hue consistency issues - all steps now maintain consistent hue
@@ -76,23 +76,8 @@ export const defaultPalettes: ColorRamp[] = [
     { step: 950, hex: '#04120A' },
   ], true),
 
-  // Yellow - warm golden yellow
-  generateRamp('Yellow', '#A68741', [
-    { step: 50, hex: '#FEFBF3' },
-    { step: 100, hex: '#FDF5E3' },
-    { step: 150, hex: '#FAEBCA' },
-    { step: 200, hex: '#F4D89A' },
-    { step: 250, hex: '#EBC46E' },
-    { step: 350, hex: '#D4A854' },
-    { step: 450, hex: '#A68741' },
-    { step: 550, hex: '#836A33' },
-    { step: 650, hex: '#675428' },
-    { step: 750, hex: '#4E401E' },
-    { step: 800, hex: '#3A3016' },
-    { step: 850, hex: '#28220F' },
-    { step: 900, hex: '#1C170A' },
-    { step: 950, hex: '#100D05' },
-  ], true),
+  // Yellow - HSL model (hue ~51°, high saturation, fixed lightness scale)
+  generateHslRamp('Yellow', '#F2D00D', true),
 
   // Orange - true orange
   generateRamp('Orange', '#F15900', [
